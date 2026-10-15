@@ -15,7 +15,7 @@
       color: white;
     }
 
-    h1, h3 { color: white; }
+    h1, h3, h5 { color: white; }
     h3 { margin-bottom: 4px; }
     a, a:visited { color: #9ec5ff; }
 
@@ -46,14 +46,16 @@
 </head>
 <body>
   <h1>FolioHelp</h1>
-  <input id="company" placeholder="Company name, e.g. Tata Motors">
-  <button id="add">Add</button>
-  <div id="watch"></div>
-  <div id="charts" style="display:none">
+  <h5>Track your stock portfolio and get the latest news for each company.</h5>
+    <div id="charts" style="display:none">
     <div class="chart"><canvas id="pie"></canvas></div>
     <div class="chart"><canvas id="bar"></canvas></div>
   </div>
   <p id="chartnote"></p>
+  <input id="company" placeholder="Company name, e.g. Tata Motors">
+  <button id="add">Add</button>
+  <div id="watch"></div>
+
   <script>
     let pieChart, barChart;
  
