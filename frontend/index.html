@@ -28,7 +28,9 @@
       padding-right: 8px;
       scrollbar-color: #9ec5ff rgb(24, 50, 104);
     }
-
+      #charts { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 4px; }
+    .chart { flex: 1 1 280px; max-width: 340px; }
+    #chartnote { font-size: 13px; color: #c9d8f5; margin: 0 0 16px; }
     .item {
       border: 1px solid rgb(120, 160, 230);
       border-radius: 8px;
@@ -40,14 +42,66 @@
     .thumb { display: block; max-width: 240px; border-radius: 6px; margin-bottom: 4px; }
     .logo { width: 16px; height: 16px; margin-right: 6px; vertical-align: middle; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <h1>FolioHelp</h1>
   <input id="company" placeholder="Company name, e.g. Tata Motors">
   <button id="add">Add</button>
   <div id="watch"></div>
-
+  <div id="charts" style="display:none">
+    <div class="chart"><canvas id="pie"></canvas></div>
+    <div class="chart"><canvas id="bar"></canvas></div>
+  </div>
+  <p id="chartnote"></p>
   <script>
+    let pieChart, barChart;
+ 
+    async function loadCharts() {
+      let q = [];
+      try { q = await (await fetch("/api/quotes")).json(); } catch (e) {}
+      const ok = q.filter(x => x.change_pct !== null && x.change_pct !== undefined);
+      const up = ok.filter(x => x.change_pct > 0).length;
+      const down = ok.filter(x => x.change_pct < 0).length;
+      const flat = ok.length - up - down;
+ 
+      if (pieChart) pieChart.destroy();
+      if (barChart) barChart.destroy();
+      document.getElementById("charts").style.display = ok.length ? "flex" : "none";
+ 
+      const missing = q.filter(x => !ok.includes(x)).map(x => x.name);
+      document.getElementById("chartnote").textContent =
+        (ok.length ? "Change vs. previous close (latest trading session). " : "") +
+        (missing.length ? "No price data for: " + missing.join(", ") + ". Try the full company name." : "");
+      if (!ok.length) return;
+ 
+      const light = { labels: { color: "white" } };
+      pieChart = new Chart(document.getElementById("pie"), {
+        type: "pie",
+        data: {
+          labels: ["In profit (up)", "In loss (down)", "Unchanged"],
+          datasets: [{ data: [up, down, flat], backgroundColor: ["#2ecc71", "#e74c3c", "#95a5a6"] }]
+        },
+        options: { plugins: { legend: light, title: { display: true, text: "Today", color: "white" } } }
+      });
+ 
+      barChart = new Chart(document.getElementById("bar"), {
+        type: "bar",
+        data: {
+          labels: ok.map(x => x.name),
+          datasets: [{
+            label: "Change today (%)",
+            data: ok.map(x => x.change_pct),
+            backgroundColor: ok.map(x => x.change_pct >= 0 ? "#2ecc71" : "#e74c3c")
+          }]
+        },
+        options: {
+          plugins: { legend: light },
+          scales: { x: { ticks: { color: "white" } }, y: { ticks: { color: "white" } } }
+        }
+      });
+    }
+ 
     async function loadWatchlist() {
       const data = await (await fetch("/api/watchlist")).json();
       const box = document.getElementById("watch");
@@ -95,6 +149,7 @@
           list.append(item);
         }
       }
+      loadCharts();
     }
 
     document.getElementById("add").onclick = async () => {
