@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FolioHelp</title>
+  <style>
+    html { background-color: rgb(24, 50, 104); }
+
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 720px;
+      margin: 24px auto;
+      padding: 0 16px;
+      color: white;
+    }
+
+    h1, h3 { color: white; }
+    h3 { margin-bottom: 4px; }
+    a, a:visited { color: #9ec5ff; }
+
+    #company { padding: 8px; width: 60%; }
+    button { padding: 8px 14px; cursor: pointer; }
+
+    .news-list {
+      max-height: 340px;
+      overflow-y: auto;
+      padding-right: 8px;
+      scrollbar-color: #9ec5ff rgb(24, 50, 104);
+    }
+
+    .item {
+      border: 1px solid rgb(120, 160, 230);
+      border-radius: 8px;
+      padding: 10px;
+      margin: 10px 0;
+      overflow-wrap: anywhere;
+    }
+
+    .thumb { display: block; max-width: 240px; border-radius: 6px; margin-bottom: 4px; }
+    .logo { width: 16px; height: 16px; margin-right: 6px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <h1>FolioHelp</h1>
+  <input id="company" placeholder="Company name, e.g. Tata Motors">
+  <button id="add">Add</button>
+  <div id="watch"></div>
+
+  <script>
+    async function loadWatchlist() {
+      const data = await (await fetch("/api/watchlist")).json();
+      const box = document.getElementById("watch");
+      box.replaceChildren();
+
+      for (const c of data) {
+        const h = document.createElement("h3");
+        h.className = "company";
+        h.textContent = c.name + " ";
+
+        const rm = document.createElement("button");
+        rm.textContent = "Remove";
+        rm.onclick = async () => {
+          await fetch("/api/watchlist/" + encodeURIComponent(c.name), { method: "DELETE" });
+          loadWatchlist();
+        };
+        h.append(rm);
+        box.append(h);
+
+        const list = document.createElement("div");
+        list.className = "news-list";
+        box.append(list);
+
+        for (const n of c.news) {
+          const item = document.createElement("div");
+          item.className = "item";
+
+          if (n.image && n.image.startsWith("https://")) {
+            const big = document.createElement("img");
+            big.className = "thumb";
+            big.src = n.image; big.alt = ""; big.loading = "lazy"; big.referrerPolicy = "no-referrer";
+            item.append(big);
+          }
+          if (n.logo) {
+            const logo = document.createElement("img");
+            logo.className = "logo";
+            logo.src = n.logo; logo.alt = "";
+            item.append(logo);
+          }
+          if (n.link.startsWith("http")) {
+            const a = document.createElement("a");
+            a.href = n.link; a.textContent = n.title; a.target = "_blank"; a.rel = "noopener";
+            item.append(a, " (" + n.source + ")");
+          }
+          list.append(item);
+        }
+      }
+    }
+
+    document.getElementById("add").onclick = async () => {
+      const input = document.getElementById("company");
+      if (!input.value.trim()) return;
+      await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: input.value })
+      });
+      input.value = "";
+      loadWatchlist();
+    };
+
+    loadWatchlist();   // runs every time the app opens
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Your personal watchlist
+watchlist.json
+
+# Secrets (not needed now, but a good habit)
+.env
+
+# Python clutter
+__pycache__/
+*.pyc
+.venv/
+venv/
