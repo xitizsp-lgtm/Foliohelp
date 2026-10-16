@@ -2,3 +2,5 @@
    uvicorn
    feedparser
    googlenewsdecoder
+   itsdangerous
+ 

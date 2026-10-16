@@ -1,6 +1,6 @@
 # Your personal watchlist
 watchlist.json
-
+foliohelp.db
 # Secrets (not needed now, but a good habit)
 .env
 

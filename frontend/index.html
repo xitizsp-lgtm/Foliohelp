@@ -6,31 +6,44 @@
   <title>FolioHelp</title>
   <style>
     html { background-color: rgb(24, 50, 104); }
-
+ 
     body {
       font-family: system-ui, sans-serif;
-      max-width: 720px;
+      max-width: 900px;
       margin: 24px auto;
       padding: 0 16px;
       color: white;
     }
-
-    h1, h3, h5 { color: white; }
+ 
+    h1, h2, h3, h5 { color: white; }
+    h2 { margin: 28px 0 8px; }
     h3 { margin-bottom: 4px; }
     a, a:visited { color: #9ec5ff; }
-
-    #company { padding: 8px; width: 60%; }
+ 
+    input { padding: 8px; margin: 2px 0; }
     button { padding: 8px 14px; cursor: pointer; }
-
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .err { color: #ffb4b4; min-height: 1.2em; margin: 6px 0; }
+    .small { font-size: 13px; color: #c9d8f5; }
+ 
+    .gain { color: #5be584; }
+    .loss { color: #ff8a8a; }
+    #summary { font-size: 18px; font-weight: 600; margin: 10px 0; }
+ 
+    .tablewrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { border: 1px solid rgb(120, 160, 230); padding: 6px 8px; text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+ 
+    #charts { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 4px; }
+    .chart { flex: 1 1 280px; max-width: 340px; }
+ 
     .news-list {
       max-height: 340px;
       overflow-y: auto;
       padding-right: 8px;
       scrollbar-color: #9ec5ff rgb(24, 50, 104);
     }
-      #charts { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 4px; }
-    .chart { flex: 1 1 280px; max-width: 340px; }
-    #chartnote { font-size: 13px; color: #c9d8f5; margin: 0 0 16px; }
     .item {
       border: 1px solid rgb(120, 160, 230);
       border-radius: 8px;
@@ -38,7 +51,6 @@
       margin: 10px 0;
       overflow-wrap: anywhere;
     }
-
     .thumb { display: block; max-width: 240px; border-radius: 6px; margin-bottom: 4px; }
     .logo { width: 16px; height: 16px; margin-right: 6px; vertical-align: middle; }
   </style>
@@ -47,21 +59,183 @@
 <body>
   <h1>FolioHelp</h1>
   <h5>Track your stock portfolio and get the latest news for each company.</h5>
-    <div id="charts" style="display:none">
-    <div class="chart"><canvas id="pie"></canvas></div>
-    <div class="chart"><canvas id="bar"></canvas></div>
+ 
+  <!-- LOGIN -->
+  <div id="auth" style="display:none">
+    <h2>Log in or create an account</h2>
+    <div class="row">
+      <input id="u" placeholder="Username" autocomplete="username">
+      <input id="p" type="password" placeholder="Password (8+ characters)" autocomplete="current-password">
+      <button id="login">Log in</button>
+      <button id="register">Create account</button>
+    </div>
+    <p id="autherr" class="err"></p>
   </div>
-  <p id="chartnote"></p>
-  <input id="company" placeholder="Company name, e.g. Tata Motors">
-  <button id="add">Add</button>
-  <div id="watch"></div>
-
+ 
+  <!-- DASHBOARD -->
+  <div id="app" style="display:none">
+    <div class="row">
+      <span>Signed in as <b id="who"></b></span>
+      <button id="logout">Log out</button>
+    </div>
+ 
+    <h2>My investments</h2>
+    <div class="row">
+      <input id="icompany" placeholder="Company, e.g. Tata Motors">
+      <input id="iamount" type="number" min="0" step="any" placeholder="Amount invested">
+      <input id="idate" type="date" title="Date you invested">
+      <input id="ibuy" type="number" min="0" step="any" placeholder="Buy price (optional)">
+      <button id="addinv">Add investment</button>
+    </div>
+    <p class="small">Leave buy price empty and the app uses the closing price on your investment date. Amounts are in the stock's own currency.</p>
+    <p id="inverr" class="err"></p>
+    <div id="summary"></div>
+    <div class="tablewrap">
+      <table id="invtable" style="display:none">
+        <thead><tr>
+          <th>Company</th><th>Invested</th><th>Date</th><th>Buy price</th>
+          <th>Now</th><th>Value</th><th>Profit / loss</th><th></th>
+        </tr></thead>
+        <tbody id="invbody"></tbody>
+      </table>
+    </div>
+ 
+    <h2>Watchlist: today's movers</h2>
+    <div id="charts" style="display:none">
+      <div class="chart"><canvas id="pie"></canvas></div>
+      <div class="chart"><canvas id="bar"></canvas></div>
+    </div>
+    <p id="chartnote" class="small"></p>
+ 
+    <div class="row">
+      <input id="company" placeholder="Company name, e.g. Tata Motors" style="width:60%">
+      <button id="add">Add to watchlist</button>
+    </div>
+    <div id="watch"></div>
+  </div>
+ 
   <script>
+    const $ = id => document.getElementById(id);
+    const fmt = n => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+ 
+    async function api(path, method = "GET", body) {
+      const res = await fetch(path, {
+        method,
+        headers: body ? { "Content-Type": "application/json" } : {},
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (res.status === 401) { showAuth(); throw new Error("login"); }
+      if (!res.ok) {
+        let msg = "Something went wrong";
+        try { const d = (await res.json()).detail; msg = typeof d === "string" ? d : "Please check the fields you entered"; } catch (e) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    }
+ 
+    function showAuth() { $("auth").style.display = "block"; $("app").style.display = "none"; }
+ 
+    async function start() {
+      try {
+        const me = await api("/api/me");
+        $("who").textContent = me.username;
+        $("auth").style.display = "none";
+        $("app").style.display = "block";
+        loadInvestments();
+        loadWatchlist();
+      } catch (e) {}
+    }
+ 
+    async function doAuth(kind) {
+      $("autherr").textContent = "";
+      try {
+        await api("/api/" + kind, "POST", { username: $("u").value, password: $("p").value });
+        $("p").value = "";
+        start();
+      } catch (e) { if (e.message !== "login") $("autherr").textContent = e.message; }
+    }
+    $("login").onclick = () => doAuth("login");
+    $("register").onclick = () => doAuth("register");
+    $("logout").onclick = async () => {
+      await fetch("/api/logout", { method: "POST" });
+      $("watch").replaceChildren(); $("invbody").replaceChildren();
+      showAuth();
+    };
+ 
+    // ---------- investments ----------
+    function cell(tr, text, cls) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      if (cls) td.className = cls;
+      tr.append(td);
+      return td;
+    }
+ 
+    async function loadInvestments() {
+      const d = await api("/api/investments");
+      const sum = $("summary"), body = $("invbody");
+      body.replaceChildren();
+      $("invtable").style.display = d.items.length ? "table" : "none";
+ 
+      if (!d.items.length) { sum.className = ""; sum.textContent = "No investments yet. Add your first one above."; }
+      else if (d.summary) {
+        const s = d.summary, up = s.profit >= 0;
+        sum.className = up ? "gain" : "loss";
+        sum.textContent = (up ? "▲ In profit: +" : "▼ In loss: ") + fmt(s.profit) +
+          "   (invested " + fmt(s.invested) + ", now worth " + fmt(s.value) + ")";
+      } else {
+        sum.className = "";
+        sum.textContent = "Overall total unavailable (mixed currencies or missing prices). See each row.";
+      }
+ 
+      for (const i of d.items) {
+        const tr = document.createElement("tr");
+        const cur = i.currency ? " " + i.currency : "";
+        cell(tr, i.company + (i.symbol ? " (" + i.symbol + ")" : ""));
+        cell(tr, fmt(i.amount));
+        cell(tr, i.date);
+        cell(tr, i.buy_price ? fmt(i.buy_price) : "n/a");
+        cell(tr, i.price ? fmt(i.price) : "n/a");
+        cell(tr, i.value !== null ? fmt(i.value) + cur : "n/a");
+        if (i.profit !== null) {
+          const up = i.profit >= 0;
+          cell(tr, (up ? "▲ +" : "▼ ") + fmt(i.profit) + " (" + (up ? "+" : "") + i.profit_pct + "%)", up ? "gain" : "loss");
+        } else cell(tr, "No price data");
+        const td = document.createElement("td");
+        const rm = document.createElement("button");
+        rm.textContent = "Remove";
+        rm.onclick = async () => { await api("/api/investments/" + i.id, "DELETE"); loadInvestments(); };
+        td.append(rm); tr.append(td);
+        body.append(tr);
+      }
+    }
+ 
+    $("idate").max = new Date().toISOString().slice(0, 10);
+    $("addinv").onclick = async () => {
+      $("inverr").textContent = "";
+      const body = {
+        company: $("icompany").value.trim(),
+        amount: parseFloat($("iamount").value),
+        date: $("idate").value,
+        buy_price: $("ibuy").value ? parseFloat($("ibuy").value) : null
+      };
+      if (!body.company || !(body.amount > 0) || !body.date) {
+        $("inverr").textContent = "Fill in the company, the amount and the date.";
+        return;
+      }
+      try {
+        await api("/api/investments", "POST", body);
+        $("icompany").value = ""; $("iamount").value = ""; $("ibuy").value = "";
+        loadInvestments();
+      } catch (e) { if (e.message !== "login") $("inverr").textContent = e.message; }
+    };
+ 
+    // ---------- charts ----------
     let pieChart, barChart;
  
     async function loadCharts() {
       let q = [];
-      try { q = await (await fetch("/api/quotes")).json(); } catch (e) {}
+      try { q = await api("/api/quotes"); } catch (e) {}
       const ok = q.filter(x => x.change_pct !== null && x.change_pct !== undefined);
       const up = ok.filter(x => x.change_pct > 0).length;
       const down = ok.filter(x => x.change_pct < 0).length;
@@ -69,16 +243,16 @@
  
       if (pieChart) pieChart.destroy();
       if (barChart) barChart.destroy();
-      document.getElementById("charts").style.display = ok.length ? "flex" : "none";
+      $("charts").style.display = ok.length ? "flex" : "none";
  
       const missing = q.filter(x => !ok.includes(x)).map(x => x.name);
-      document.getElementById("chartnote").textContent =
+      $("chartnote").textContent =
         (ok.length ? "Change vs. previous close (latest trading session). " : "") +
         (missing.length ? "No price data for: " + missing.join(", ") + ". Try the full company name." : "");
       if (!ok.length) return;
  
       const light = { labels: { color: "white" } };
-      pieChart = new Chart(document.getElementById("pie"), {
+      pieChart = new Chart($("pie"), {
         type: "pie",
         data: {
           labels: ["In profit (up)", "In loss (down)", "Unchanged"],
@@ -86,8 +260,7 @@
         },
         options: { plugins: { legend: light, title: { display: true, text: "Today", color: "white" } } }
       });
- 
-      barChart = new Chart(document.getElementById("bar"), {
+      barChart = new Chart($("bar"), {
         type: "bar",
         data: {
           labels: ok.map(x => x.name),
@@ -104,33 +277,29 @@
       });
     }
  
+    // ---------- watchlist and news ----------
     async function loadWatchlist() {
-      const data = await (await fetch("/api/watchlist")).json();
-      const box = document.getElementById("watch");
+      const data = await api("/api/watchlist");
+      const box = $("watch");
       box.replaceChildren();
-
+ 
       for (const c of data) {
         const h = document.createElement("h3");
         h.className = "company";
         h.textContent = c.name + " ";
-
         const rm = document.createElement("button");
         rm.textContent = "Remove";
-        rm.onclick = async () => {
-          await fetch("/api/watchlist/" + encodeURIComponent(c.name), { method: "DELETE" });
-          loadWatchlist();
-        };
+        rm.onclick = async () => { await api("/api/watchlist/" + encodeURIComponent(c.name), "DELETE"); loadWatchlist(); };
         h.append(rm);
         box.append(h);
-
+ 
         const list = document.createElement("div");
         list.className = "news-list";
         box.append(list);
-
+ 
         for (const n of c.news) {
           const item = document.createElement("div");
           item.className = "item";
-
           if (n.image && n.image.startsWith("https://")) {
             const big = document.createElement("img");
             big.className = "thumb";
@@ -153,20 +322,17 @@
       }
       loadCharts();
     }
-
-    document.getElementById("add").onclick = async () => {
-      const input = document.getElementById("company");
-      if (!input.value.trim()) return;
-      await fetch("/api/watchlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: input.value })
-      });
-      input.value = "";
+ 
+    $("add").onclick = async () => {
+      const name = $("company").value.trim();
+      if (!name) return;
+      await api("/api/watchlist", "POST", { name });
+      $("company").value = "";
       loadWatchlist();
     };
-
-    loadWatchlist();   // runs every time the app opens
+ 
+    start();   // if you are still logged in, your dashboard loads straight away
   </script>
 </body>
 </html>
+ 
